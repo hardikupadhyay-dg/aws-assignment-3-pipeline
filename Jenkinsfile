@@ -29,7 +29,8 @@ pipeline {
 
         stage('Validate CloudFormation') {
             steps {
-                withAWS(credentials: 'aws-creds', region: "${AWS_REGION}") {
+                withCredentials([[$class: 'AmazonWebServicesCredentialsBinding',
+                                  credentialsId: 'aws-creds']]) {
                     bat """
                     aws cloudformation validate-template --template-body file://template.yaml
                     """
@@ -39,11 +40,12 @@ pipeline {
 
         stage('Upload Artifacts to S3') {
             steps {
-                withAWS(credentials: 'aws-creds', region: "${AWS_REGION}") {
+                withCredentials([[$class: 'AmazonWebServicesCredentialsBinding',
+                                  credentialsId: 'aws-creds']]) {
                     bat """
                     aws s3 cp create-ami.zip s3://${S3_BUCKET}/lambda/create-ami.zip
                     aws s3 cp launch-instance.zip s3://${S3_BUCKET}/lambda/launch-instance.zip
-                    aws s3 cp statemachines\\sample-step-function.json s3://${S3_BUCKET}/statemachines/sample-step-function.json
+                    aws s3 cp statemachines/sample-step-function.json s3://${S3_BUCKET}/statemachines/sample-step-function.json
                     """
                 }
             }
@@ -51,7 +53,8 @@ pipeline {
 
         stage('Deploy CloudFormation Stack') {
             steps {
-                withAWS(credentials: 'aws-creds', region: "${AWS_REGION}") {
+                withCredentials([[$class: 'AmazonWebServicesCredentialsBinding',
+                                  credentialsId: 'aws-creds']]) {
                     bat """
                     aws cloudformation deploy ^
                         --stack-name ${STACK_NAME} ^
@@ -63,18 +66,6 @@ pipeline {
             }
         }
 
-        stage('Trigger Step Function (Optional)') {
-            when { expression { return params.RUN_STEP_FUNCTION == true } }
-            steps {
-                withAWS(credentials: 'aws-creds', region: "${AWS_REGION}") {
-                    bat '''
-                    for /f "delims=" %%a in ('aws cloudformation describe-stacks --stack-name %STACK_NAME% --query "Stacks[0].Outputs[?OutputKey==\'StateMachineArn\'].OutputValue" --output text') do set STEP_ARN=%%a
-
-                    aws stepfunctions start-execution --state-machine-arn %STEP_ARN% --input "{\\"step_function_name\\":\\"jenkins-run\\",\\"step_function_launch_time\\":\\"now\\",\\"existing-instance-id\\":\\"i-xxxxxxxx\\"}"
-                    '''
-                }
-            }
-        }
     }
 
     post {
