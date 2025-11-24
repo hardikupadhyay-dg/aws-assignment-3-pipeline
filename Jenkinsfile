@@ -306,15 +306,15 @@ pipeline {
             }
         }
 
-        stage('Set AWS Credentials') {
+        stage('Load AWS Credentials') {
             steps {
                 withCredentials([
                     string(credentialsId: 'aws-jenkins-access', variable: 'AWS_ACCESS_KEY_ID'),
                     string(credentialsId: 'aws-jenkins-secret', variable: 'AWS_SECRET_ACCESS_KEY')
                 ]) {
-                    bat '''
-                    echo AWS credentials configured
-                    '''
+                    bat """
+                    echo Using AWS Credentials...
+                    """
                 }
             }
         }
@@ -333,61 +333,73 @@ pipeline {
 
         stage('Validate CloudFormation') {
             steps {
-                bat """
-                aws cloudformation validate-template ^
-                    --template-body file://template.yaml ^
-                    --region %AWS_REGION%
-                """
+                withCredentials([
+                    string(credentialsId: 'aws-jenkins-access', variable: 'AWS_ACCESS_KEY_ID'),
+                    string(credentialsId: 'aws-jenkins-secret', variable: 'AWS_SECRET_ACCESS_KEY')
+                ]) {
+                    bat """
+                    aws cloudformation validate-template ^
+                        --template-body file://template.yaml ^
+                        --region %AWS_REGION%
+                    """
+                }
             }
         }
 
-        stage('Upload Artifacts to S3') {
+        stage('Upload Artifacts') {
             steps {
-                bat """
-                aws s3 cp create-ami.zip s3://%S3_BUCKET%/lambda/create-ami.zip --region %AWS_REGION%
-                aws s3 cp launch-instance.zip s3://%S3_BUCKET%/lambda/launch-instance.zip --region %AWS_REGION%
-                aws s3 cp statemachines/sample-step-function.json s3://%S3_BUCKET%/statemachines/sample-step-function.json --region %AWS_REGION%
-                """
+                withCredentials([
+                    string(credentialsId: 'aws-jenkins-access', variable: 'AWS_ACCESS_KEY_ID'),
+                    string(credentialsId: 'aws-jenkins-secret', variable: 'AWS_SECRET_ACCESS_KEY')
+                ]) {
+                    bat """
+                    aws s3 cp create-ami.zip s3://%S3_BUCKET%/lambda/create-ami.zip --region %AWS_REGION%
+                    aws s3 cp launch-instance.zip s3://%S3_BUCKET%/lambda/launch-instance.zip --region %AWS_REGION%
+                    aws s3 cp statemachines/sample-step-function.json s3://%S3_BUCKET%/statemachines/sample-step-function.json --region %AWS_REGION%
+                    """
+                }
             }
         }
 
         stage('Deploy CloudFormation Stack') {
             steps {
-                bat """
-                aws cloudformation deploy ^
-                    --stack-name %STACK_NAME% ^
-                    --template-file template.yaml ^
-                    --capabilities CAPABILITY_NAMED_IAM ^
-                    --parameter-overrides ArtifactBucketName=%S3_BUCKET% ^
-                    --region %AWS_REGION%
-                """
+                withCredentials([
+                    string(credentialsId: 'aws-jenkins-access', variable: 'AWS_ACCESS_KEY_ID'),
+                    string(credentialsId: 'aws-jenkins-secret', variable: 'AWS_SECRET_ACCESS_KEY')
+                ]) {
+                    bat """
+                    aws cloudformation deploy ^
+                        --stack-name %STACK_NAME% ^
+                        --template-file template.yaml ^
+                        --capabilities CAPABILITY_NAMED_IAM ^
+                        --parameter-overrides ArtifactBucketName=%S3_BUCKET% ^
+                        --region %AWS_REGION%
+                    """
+                }
             }
         }
 
         stage('Trigger Step Function') {
             steps {
-                bat """
-                for /f "tokens=*" %%i in ('aws cloudformation describe-stacks ^
-                    --stack-name %STACK_NAME% ^
-                    --query "Stacks[0].Outputs[?OutputKey=='StateMachineArn'].OutputValue" ^
-                    --output text ^
-                    --region %AWS_REGION%"') do set STEP_ARN=%%i
+                withCredentials([
+                    string(credentialsId: 'aws-jenkins-access', variable: 'AWS_ACCESS_KEY_ID'),
+                    string(credentialsId: 'aws-jenkins-secret', variable: 'AWS_SECRET_ACCESS_KEY')
+                ]) {
+                    bat """
+                    FOR /F "tokens=* usebackq" %%a in (`aws cloudformation describe-stacks --stack-name %STACK_NAME% --query "Stacks[0].Outputs[?OutputKey=='StateMachineArn'].OutputValue" --output text --region %AWS_REGION%`) do set STEP_ARN=%%a
 
-                aws stepfunctions start-execution ^
-                    --state-machine-arn %STEP_ARN% ^
-                    --input "{\\"step_function_name\\":\\"jenkins-run\\",\\"step_function_launch_time\\":\\"now\\",\\"existing-instance-id\\":\\"i-xxxxxxxx\\"}" ^
-                    --region %AWS_REGION%
-                """
+                    aws stepfunctions start-execution ^
+                        --state-machine-arn %STEP_ARN% ^
+                        --input "{\\"step_function_name\\":\\"jenkins-run\\", \\"step_function_launch_time\\":\\"now\\", \\"existing-instance-id\\":\\"i-0abcd123\\"}" ^
+                        --region %AWS_REGION%
+                    """
+                }
             }
         }
     }
 
     post {
-        success {
-            echo "Pipeline completed successfully!"
-        }
-        failure {
-            echo "Pipeline failed!"
-        }
+        success { echo "Pipeline completed successfully!" }
+        failure { echo "Pipeline failed!" }
     }
 }
