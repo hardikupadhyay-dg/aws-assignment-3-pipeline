@@ -104,23 +104,110 @@
 // }
 
 
+// pipeline {
+//     agent any
+
+//     environment {
+//         AWS_REGION = 'ap-south-1'
+//         S3_BUCKET = 'aws-assignment-three'
+//         STACK_NAME = 'sample-step-function-stack'
+//     }
+
+//     stages {
+
+//         stage('Checkout') {
+//             steps {
+//                 checkout scm
+//             }
+//         }
+
+//         stage('Package Lambdas') {
+//             steps {
+//                 bat '''
+//                 cd lambdas\\create-ami
+//                 powershell -command "Compress-Archive -Path * -DestinationPath ..\\..\\create-ami.zip -Force"
+
+//                 cd ..\\launch-instance
+//                 powershell -command "Compress-Archive -Path * -DestinationPath ..\\..\\launch-instance.zip -Force"
+//                 '''
+//             }
+//         }
+
+//         stage('Upload Artifacts to S3') {
+//             steps {
+//                 withCredentials([
+//                     string(credentialsId: 'aws-jenkins-access', variable: 'AWS_ACCESS_KEY_ID'),
+//                     string(credentialsId: 'aws-jenkins-secret', variable: 'AWS_SECRET_ACCESS_KEY')
+//                 ]) {
+//                     bat """
+//                     aws s3 cp create-ami.zip s3://${S3_BUCKET}/lambda/create-ami.zip --region %AWS_REGION%
+//                     aws s3 cp launch-instance.zip s3://${S3_BUCKET}/lambda/launch-instance.zip --region %AWS_REGION%
+//                     aws s3 cp statemachines/sample-step-function.json s3://${S3_BUCKET}/statemachines/sample-step-function.json --region %AWS_REGION%
+//                     """
+//                 }
+//             }
+//         }
+
+//         stage('Deploy CloudFormation Stack') {
+//             steps {
+//                 withCredentials([
+//                     string(credentialsId: 'aws-jenkins-access', variable: 'AWS_ACCESS_KEY_ID'),
+//                     string(credentialsId: 'aws-jenkins-secret', variable: 'AWS_SECRET_ACCESS_KEY')
+//                 ]) {
+//                     bat """
+//                     aws cloudformation deploy ^
+//                     --stack-name sample-step-function-stack ^
+//                     --template-file template.yaml ^
+//                     --capabilities CAPABILITY_NAMED_IAM ^
+//                     --parameter-overrides ArtifactBucketName=aws-assignment-three ^
+//                     --region ap-south-1
+
+//                     IF %ERRORLEVEL% EQU 255 (
+//                         echo "No changes found, continuing pipeline..."
+//                     EXIT /B 0
+//                 )
+
+//                     """
+//                 }
+//             }
+//         }
+//     }
+
+//     post {
+//         success {
+//             echo "Pipeline completed successfully."
+//         }
+//         failure {
+//             echo "Pipeline failed!"
+//         }
+//     }
+// }
+
+
+
 pipeline {
     agent any
 
     environment {
-        AWS_REGION = 'ap-south-1'
-        S3_BUCKET = 'aws-assignment-three'
-        STACK_NAME = 'sample-step-function-stack'
+        AWS_REGION = "ap-south-1"
+        S3_BUCKET = "aws-assignment-three"
+        STACK_NAME = "sample-step-function-stack"
     }
 
     stages {
 
+        /* =========================
+           1. CHECKOUT SOURCE CODE
+        ==========================*/
         stage('Checkout') {
             steps {
                 checkout scm
             }
         }
 
+        /* =========================
+           2. PACKAGE LAMBDAS (Windows)
+        ==========================*/
         stage('Package Lambdas') {
             steps {
                 bat '''
@@ -133,6 +220,27 @@ pipeline {
             }
         }
 
+        /* =========================
+           3. VALIDATE CLOUDFORMATION
+        ==========================*/
+        stage('Validate CloudFormation') {
+            steps {
+                withCredentials([
+                    string(credentialsId: 'aws-jenkins-access', variable: 'AWS_ACCESS_KEY_ID'),
+                    string(credentialsId: 'aws-jenkins-secret', variable: 'AWS_SECRET_ACCESS_KEY')
+                ]) {
+                    bat """
+                    aws cloudformation validate-template ^
+                        --template-body file://template.yaml ^
+                        --region %AWS_REGION%
+                    """
+                }
+            }
+        }
+
+        /* =========================
+           4. UPLOAD TO S3
+        ==========================*/
         stage('Upload Artifacts to S3') {
             steps {
                 withCredentials([
@@ -140,15 +248,18 @@ pipeline {
                     string(credentialsId: 'aws-jenkins-secret', variable: 'AWS_SECRET_ACCESS_KEY')
                 ]) {
                     bat """
-                    aws s3 cp create-ami.zip s3://${S3_BUCKET}/lambda/create-ami.zip --region %AWS_REGION%
-                    aws s3 cp launch-instance.zip s3://${S3_BUCKET}/lambda/launch-instance.zip --region %AWS_REGION%
-                    aws s3 cp statemachines/sample-step-function.json s3://${S3_BUCKET}/statemachines/sample-step-function.json --region %AWS_REGION%
+                    aws s3 cp create-ami.zip s3://%S3_BUCKET%/lambda/create-ami.zip --region %AWS_REGION%
+                    aws s3 cp launch-instance.zip s3://%S3_BUCKET%/lambda/launch-instance.zip --region %AWS_REGION%
+                    aws s3 cp statemachines\\sample-step-function.json s3://%S3_BUCKET%/statemachines/sample-step-function.json --region %AWS_REGION%
                     """
                 }
             }
         }
 
-        stage('Deploy CloudFormation Stack') {
+        /* =========================
+           5. DEPLOY CLOUDFORMATION
+        ==========================*/
+        stage('Deploy CloudFormation') {
             steps {
                 withCredentials([
                     string(credentialsId: 'aws-jenkins-access', variable: 'AWS_ACCESS_KEY_ID'),
@@ -156,17 +267,11 @@ pipeline {
                 ]) {
                     bat """
                     aws cloudformation deploy ^
-                    --stack-name sample-step-function-stack ^
-                    --template-file template.yaml ^
-                    --capabilities CAPABILITY_NAMED_IAM ^
-                    --parameter-overrides ArtifactBucketName=aws-assignment-three ^
-                    --region ap-south-1
-
-                    IF %ERRORLEVEL% EQU 255 (
-                        echo "No changes found, continuing pipeline..."
-                    EXIT /B 0
-                )
-
+                        --stack-name %STACK_NAME% ^
+                        --template-file template.yaml ^
+                        --capabilities CAPABILITY_NAMED_IAM ^
+                        --parameter-overrides ArtifactBucketName=%S3_BUCKET% ^
+                        --region %AWS_REGION%
                     """
                 }
             }
