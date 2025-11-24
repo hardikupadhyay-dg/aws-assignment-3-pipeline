@@ -156,10 +156,12 @@ pipeline {
                 ]) {
                     bat """
                     aws cloudformation deploy ^
-                    --stack-name ${STACK_NAME} ^
+                    --stack-name sample-step-function-stack ^
                     --template-file template.yaml ^
                     --capabilities CAPABILITY_NAMED_IAM ^
-                    --parameter-overrides ArtifactBucketName=${S3_BUCKET}
+                    --parameter-overrides ArtifactBucketName=aws-assignment-three ^
+                    --region ap-south-1
+
                     IF %ERRORLEVEL% EQU 255 (
                         echo "No changes found, continuing pipeline..."
                     EXIT /B 0
