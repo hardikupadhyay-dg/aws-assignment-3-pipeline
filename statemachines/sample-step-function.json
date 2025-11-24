@@ -33,22 +33,22 @@
       "Next": "LaunchInstance"
     },
 
+    
     "LaunchInstance": {
       "Type": "Task",
       "Resource": "arn:aws:states:::lambda:invoke",
       "Parameters": {
-        "FunctionName": "${LaunchInstanceLambdaArn}",
-        "Payload": {
-          "step_function_name.$": "$.step_function_name",
-          "step_function_launch_time.$": "$.step_function_launch_time",
-          "existing-instance-id.$": "$.existing-instance-id",
-          "ami_id.$": "$.CreateAmiResult.Payload.ami_id"
-        }
-      },
-      "ResultPath": "$.LaunchInstanceResult",
-      "OutputPath": "$.LaunchInstanceResult.Payload",
-      "Catch": [{"ErrorEquals": ["States.ALL"], "Next": "UpdateFailed"}],
-      "Next": "UpdateCompleted"
+      "FunctionName": "${LaunchInstanceLambdaArn}",
+      "Payload": {
+      "step_function_name.$": "$.step_function_name",
+      "step_function_launch_time.$": "$.step_function_launch_time",
+      "existing-instance-id.$": "$.existing-instance-id",
+      "ami_id.$": "$.CreateAmiResult.Payload.ami_id"
+      }
+    },
+    "ResultPath": "$.LaunchInstanceResult",
+    "Catch": [{"ErrorEquals": ["States.ALL"], "Next": "UpdateFailed"}],
+    "Next": "UpdateCompleted"
     },
 
     "UpdateCompleted": {
