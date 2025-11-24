@@ -28,11 +28,12 @@
           "existing-instance-id.$": "$.existing-instance-id"
         }
       },
+      "ResultSelector": {
+        "ami_id.$": "$.Payload.ami_id"
+      },
       "ResultPath": "$.CreateAmiResult",
-      "Catch": [{"ErrorEquals": ["States.ALL"], "Next": "UpdateFailed"}],
       "Next": "LaunchInstance"
     },
-
     
     "LaunchInstance": {
       "Type": "Task",
@@ -40,7 +41,7 @@
       "Parameters": {
         "FunctionName": "${LaunchInstanceLambdaArn}",
         "Payload": {
-          "ami_id.$": "$.CreateAmiResult.Payload.Payload.ami_id",
+          "ami_id.$": "$.CreateAmiResult.Payload.ami_id",
           "existing-instance-id.$": "$.existing-instance-id",
           "step_function_name.$": "$.step_function_name",
           "step_function_launch_time.$": "$.step_function_launch_time"
