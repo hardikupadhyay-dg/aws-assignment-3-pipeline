@@ -17,15 +17,16 @@ pipeline {
 
         stage('Package Lambdas') {
             steps {
-                bat '''
-                cd lambdas/create-ami
-                zip -r ../../create-ami.zip .
+            bat '''
+            cd lambdas\\create-ami
+            powershell -command "Compress-Archive -Path * -DestinationPath ..\\..\\create-ami.zip -Force"
 
-                cd ../launch-instance
-                zip -r ../../launch-instance.zip .
-                '''
-            }
+            cd ..\\launch-instance
+            powershell -command "Compress-Archive -Path * -DestinationPath ..\\..\\launch-instance.zip -Force"
+            '''
         }
+    }
+}
 
         stage('Validate CloudFormation') {
             steps {
