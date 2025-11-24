@@ -1,0 +1,182 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: Sample Step Function with DynamoDB and EC2 using external Lambda & ASL
+
+Parameters:
+  ArtifactBucketName:
+    Type: String
+    Description: S3 bucket where Lambda zips and ASL JSON are stored
+
+  CreateAmiLambdaS3Key:
+    Type: String
+    Default: lambda/create-ami.zip
+
+  LaunchInstanceLambdaS3Key:
+    Type: String
+    Default: lambda/launch-instance.zip
+
+  StateMachineDefinitionS3Key:
+    Type: String
+    Default: statemachines/sample-step-function.json
+
+Resources:
+  StepFunctionTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName: sample-step-function-table
+      BillingMode: PAY_PER_REQUEST
+      AttributeDefinitions:
+        - AttributeName: step_function_name
+          AttributeType: S
+        - AttributeName: step_function_launch_time
+          AttributeType: S
+      KeySchema:
+        - AttributeName: step_function_name
+          KeyType: HASH
+        - AttributeName: step_function_launch_time
+          KeyType: RANGE
+
+  CreateAmiLambdaRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: lambda.amazonaws.com
+            Action: sts:AssumeRole
+      Path: /
+      Policies:
+        - PolicyName: CreateAmiLambdaPolicy
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                - ec2:CreateImage
+                - ec2:DescribeInstances
+                - ec2:DescribeImages
+                - ec2:DescribeSnapshots
+                - ec2:DescribeImageAttribute
+                - ec2:DescribeSnapshotAttribute
+                - ec2:DescribeTags
+                Resource: "*"
+
+              - Effect: Allow
+                Action:
+                  - logs:CreateLogGroup
+                  - logs:CreateLogStream
+                  - logs:PutLogEvents
+                Resource: "*"
+
+  CreateAmiLambda:
+    Type: AWS::Lambda::Function
+    Properties:
+      FunctionName: create-ami-lambda
+      Runtime: python3.11
+      Handler: app.lambda_handler
+      Role: !GetAtt CreateAmiLambdaRole.Arn
+      Code:
+        S3Bucket: !Ref ArtifactBucketName
+        S3Key: !Ref CreateAmiLambdaS3Key
+      Timeout: 300
+
+  LaunchInstanceLambdaRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: lambda.amazonaws.com
+            Action: sts:AssumeRole
+      Path: /
+      Policies:
+        - PolicyName: LaunchInstanceLambdaPolicy
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - ec2:RunInstances
+                  - ec2:DescribeInstances
+                Resource: "*"
+              - Effect: Allow
+                Action:
+                  - logs:CreateLogGroup
+                  - logs:CreateLogStream
+                  - logs:PutLogEvents
+                Resource: "*"
+
+  LaunchInstanceLambda:
+    Type: AWS::Lambda::Function
+    Properties:
+      FunctionName: launch-instance-lambda
+      Runtime: python3.11
+      Handler: app.lambda_handler
+      Role: !GetAtt LaunchInstanceLambdaRole.Arn
+      Code:
+        S3Bucket: !Ref ArtifactBucketName
+        S3Key: !Ref LaunchInstanceLambdaS3Key
+      Timeout: 300
+
+  StepFunctionsExecutionRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: states.amazonaws.com
+            Action: sts:AssumeRole
+      Path: /
+      Policies:
+        - PolicyName: StepFunctionsPolicy
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              # Allow Step Functions to call the Lambdas
+              - Effect: Allow
+                Action:
+                  - lambda:InvokeFunction
+                Resource:
+                  - !GetAtt CreateAmiLambda.Arn
+                  - !GetAtt LaunchInstanceLambda.Arn
+              # Allow Step Functions to write to DynamoDB table
+              - Effect: Allow
+                Action:
+                  - dynamodb:PutItem
+                  - dynamodb:UpdateItem
+                Resource: !GetAtt StepFunctionTable.Arn
+              # (Optional) CW logs, if you enable logging on state machine
+              - Effect: Allow
+                Action:
+                  - logs:CreateLogGroup
+                  - logs:CreateLogStream
+                  - logs:PutLogEvents
+                Resource: "*"
+
+  SampleStateMachine:
+    Type: AWS::StepFunctions::StateMachine
+    Properties:
+      StateMachineName: sample-step-function
+      StateMachineType: STANDARD
+      RoleArn: !GetAtt StepFunctionsExecutionRole.Arn
+      DefinitionS3Location:
+        Bucket: !Ref ArtifactBucketName
+        Key: !Ref StateMachineDefinitionS3Key
+      DefinitionSubstitutions:
+        CreateAmiLambdaArn: !GetAtt CreateAmiLambda.Arn
+        LaunchInstanceLambdaArn: !GetAtt LaunchInstanceLambda.Arn
+        DynamoTableName: !Ref StepFunctionTable
+
+Outputs:
+  StateMachineArn:
+    Description: ARN of the Step Functions state machine
+    Value: !Ref SampleStateMachine
+
+  DynamoTableNameOut:
+    Description: Name of the DynamoDB table
+    Value: !Ref StepFunctionTable
