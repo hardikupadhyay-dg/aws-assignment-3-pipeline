@@ -426,22 +426,19 @@ pipeline {
                 checkout scm
             }
         }
-
         stage('Configure AWS Credentials') {
             steps {
                 withCredentials([
                     string(credentialsId: 'aws-jenkins-access', variable: 'AWS_ACCESS_KEY_ID'),
                     string(credentialsId: 'aws-jenkins-secret', variable: 'AWS_SECRET_ACCESS_KEY')
                 ]) {
-                    bat """
-                    echo Setting AWS credentials...
-                    setx AWS_ACCESS_KEY_ID %AWS_ACCESS_KEY_ID%
-                    setx AWS_SECRET_ACCESS_KEY %AWS_SECRET_ACCESS_KEY%
-                    setx AWS_REGION ${AWS_REGION}
-                    """
+                    withEnv(["AWS_ACCESS_KEY_ID=${AWS_ACCESS_KEY_ID}","AWS_SECRET_ACCESS_KEY=${AWS_SECRET_ACCESS_KEY}","AWS_REGION=${AWS_REGION}"]) {
+                        bat 'echo AWS Credentials configured for this session.'
+                    }
                 }
             }
-        }
+}
+
 
         stage('Package Lambdas') {
             steps {
