@@ -298,10 +298,6 @@ pipeline {
         STACK_NAME = 'sample-step-function-stack'
     }
 
-    parameters {
-        booleanParam(name: 'RUN_STEP_FUNCTION', defaultValue: false, description: 'Trigger Step Function after deployment')
-    }
-
     stages {
 
         stage('Checkout') {
@@ -317,7 +313,7 @@ pipeline {
                     string(credentialsId: 'aws-jenkins-secret', variable: 'AWS_SECRET_ACCESS_KEY')
                 ]) {
                     bat '''
-                    echo AWS credentials set
+                    echo AWS credentials configured
                     '''
                 }
             }
@@ -368,21 +364,18 @@ pipeline {
             }
         }
 
-        stage('Trigger Step Function (Optional)') {
-            when { expression { params.RUN_STEP_FUNCTION == true } }
+        stage('Trigger Step Function') {
             steps {
                 bat """
                 for /f "tokens=*" %%i in ('aws cloudformation describe-stacks ^
                     --stack-name %STACK_NAME% ^
                     --query "Stacks[0].Outputs[?OutputKey=='StateMachineArn'].OutputValue" ^
                     --output text ^
-                    --region %AWS_REGION%') do set STEP_ARN=%%i
-
-                echo Triggering Step Function: %STEP_ARN%
+                    --region %AWS_REGION%"') do set STEP_ARN=%%i
 
                 aws stepfunctions start-execution ^
                     --state-machine-arn %STEP_ARN% ^
-                    --input "{ \\"step_function_name\\": \\"jenkins-run\\", \\"step_function_launch_time\\": \\"now\\", \\"existing-instance-id\\": \\"i-xxxxxxxxxx\\" }" ^
+                    --input "{\\"step_function_name\\":\\"jenkins-run\\",\\"step_function_launch_time\\":\\"now\\",\\"existing-instance-id\\":\\"i-xxxxxxxx\\"}" ^
                     --region %AWS_REGION%
                 """
             }
@@ -391,7 +384,7 @@ pipeline {
 
     post {
         success {
-            echo "Pipeline completed successfully."
+            echo "Pipeline completed successfully!"
         }
         failure {
             echo "Pipeline failed!"
