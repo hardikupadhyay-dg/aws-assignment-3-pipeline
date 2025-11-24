@@ -17,23 +17,21 @@ pipeline {
 
         stage('Package Lambdas') {
             steps {
-            bat '''
-            cd lambdas\\create-ami
-            powershell -command "Compress-Archive -Path * -DestinationPath ..\\..\\create-ami.zip -Force"
+                bat '''
+                cd lambdas\\create-ami
+                powershell -command "Compress-Archive -Path * -DestinationPath ..\\..\\create-ami.zip -Force"
 
-            cd ..\\launch-instance
-            powershell -command "Compress-Archive -Path * -DestinationPath ..\\..\\launch-instance.zip -Force"
-            '''
+                cd ..\\launch-instance
+                powershell -command "Compress-Archive -Path * -DestinationPath ..\\..\\launch-instance.zip -Force"
+                '''
+            }
         }
-    }
-}
 
         stage('Validate CloudFormation') {
             steps {
                 withAWS(credentials: 'aws-creds', region: "${AWS_REGION}") {
                     bat """
-                    aws cloudformation validate-template \
-                        --template-body file://template.yaml
+                    aws cloudformation validate-template --template-body file://template.yaml
                     """
                 }
             }
@@ -45,7 +43,7 @@ pipeline {
                     bat """
                     aws s3 cp create-ami.zip s3://${S3_BUCKET}/lambda/create-ami.zip
                     aws s3 cp launch-instance.zip s3://${S3_BUCKET}/lambda/launch-instance.zip
-                    aws s3 cp statemachines/sample-step-function.json s3://${S3_BUCKET}/statemachines/sample-step-function.json
+                    aws s3 cp statemachines\\sample-step-function.json s3://${S3_BUCKET}/statemachines/sample-step-function.json
                     """
                 }
             }
@@ -55,10 +53,10 @@ pipeline {
             steps {
                 withAWS(credentials: 'aws-creds', region: "${AWS_REGION}") {
                     bat """
-                    aws cloudformation deploy \
-                        --stack-name ${STACK_NAME} \
-                        --template-file template.yaml \
-                        --capabilities CAPABILITY_NAMED_IAM \
+                    aws cloudformation deploy ^
+                        --stack-name ${STACK_NAME} ^
+                        --template-file template.yaml ^
+                        --capabilities CAPABILITY_NAMED_IAM ^
                         --parameter-overrides ArtifactBucketName=${S3_BUCKET}
                     """
                 }
@@ -70,14 +68,9 @@ pipeline {
             steps {
                 withAWS(credentials: 'aws-creds', region: "${AWS_REGION}") {
                     bat '''
-                    STEP_ARN=$(aws cloudformation describe-stacks \
-                        --stack-name ${STACK_NAME} \
-                        --query "Stacks[0].Outputs[?OutputKey=='StateMachineArn'].OutputValue" \
-                        --output text)
+                    for /f "delims=" %%a in ('aws cloudformation describe-stacks --stack-name %STACK_NAME% --query "Stacks[0].Outputs[?OutputKey==\'StateMachineArn\'].OutputValue" --output text') do set STEP_ARN=%%a
 
-                    aws stepfunctions start-execution \
-                        --state-machine-arn $STEP_ARN \
-                        --input '{"step_function_name":"jenkins-run","step_function_launch_time":"now","existing-instance-id":"i-xxxxxxxx"}'
+                    aws stepfunctions start-execution --state-machine-arn %STEP_ARN% --input "{\\"step_function_name\\":\\"jenkins-run\\",\\"step_function_launch_time\\":\\"now\\",\\"existing-instance-id\\":\\"i-xxxxxxxx\\"}"
                     '''
                 }
             }
