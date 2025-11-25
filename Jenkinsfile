@@ -491,7 +491,7 @@ pipeline {
                         --stack-name %STACK_NAME% ^
                         --template-file template.yaml ^
                         --capabilities CAPABILITY_NAMED_IAM ^
-                        --parameter-overrides ArtifactBucketName=%S3_BUCKET% ^
+                        --parameter-overrides ArtifactBucketName=%S3_BUCKET% DummyVersion=5 ^
                         --region %AWS_REGION%
                     """
                 }
