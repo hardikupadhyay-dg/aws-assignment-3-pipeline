@@ -41,7 +41,7 @@
         "FunctionName": "${LaunchInstanceLambdaArn}",
         "PayloadResponseOnly": true,
         "Payload": {
-          "ImageId.$": "$.CreateAmiResult.ImageId",
+          "ImageId.$": "$.CreateAmiResult.Payload.ImageId",
           "existing-instance-id.$": "$.existing-instance-id"
         }
       },
