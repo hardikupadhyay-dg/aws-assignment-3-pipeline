@@ -5,6 +5,9 @@ Parameters:
   ArtifactBucketName:
     Type: String
     Description: S3 bucket where Lambda zips and ASL JSON are stored
+    
+  DummyVersion:
+    Type: String
 
   CreateAmiLambdaS3Key:
     Type: String
