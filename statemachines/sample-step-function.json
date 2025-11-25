@@ -1,21 +1,22 @@
 {
   "Comment": "Step Function that creates AMI and launches instance",
   "StartAt": "InsertStartRecord",
+
   "States": {
+
     "InsertStartRecord": {
       "Type": "Task",
       "Resource": "arn:aws:states:::aws-sdk:dynamodb:putItem",
       "Parameters": {
         "TableName": "${DynamoTableName}",
         "Item": {
-          "step_function_name": {"S.$": "$.step_function_name"},
-          "step_function_launch_time": {"S.$": "$.step_function_launch_time"},
-          "existing-instance-id": {"S.$": "$.existing-instance-id"},
-          "new-instance-id": {"S": ""},
-          "step_function_status": {"S": "STARTED"}
+          "step_function_name": { "S.$": "$.step_function_name" },
+          "step_function_launch_time": { "S.$": "$.step_function_launch_time" },
+          "existing-instance-id": { "S.$": "$.existing-instance-id" },
+          "new-instance-id": { "S": "" },
+          "step_function_status": { "S": "STARTED" }
         }
       },
-      "ResultPath": null,
       "Next": "CreateAMI"
     },
 
@@ -24,27 +25,24 @@
       "Resource": "arn:aws:states:::lambda:invoke",
       "Parameters": {
         "FunctionName": "${CreateAmiLambdaArn}",
+        "PayloadResponseOnly": true,
         "Payload": {
           "existing-instance-id.$": "$.existing-instance-id"
         }
       },
-      "ResultSelector": {
-        "ami_id.$": "$.Payload.ami_id"
-      },
       "ResultPath": "$.CreateAmiResult",
       "Next": "LaunchInstance"
     },
-    
+
     "LaunchInstance": {
       "Type": "Task",
       "Resource": "arn:aws:states:::lambda:invoke",
       "Parameters": {
         "FunctionName": "${LaunchInstanceLambdaArn}",
+        "PayloadResponseOnly": true,
         "Payload": {
-          "ami_id.$": "$.CreateAmiResult.Payload.ami_id",
-          "existing-instance-id.$": "$.existing-instance-id",
-          "step_function_name.$": "$.step_function_name",
-          "step_function_launch_time.$": "$.step_function_launch_time"
+          "ImageId.$": "$.CreateAmiResult.ImageId",
+          "existing-instance-id.$": "$.existing-instance-id"
         }
       },
       "ResultPath": "$.LaunchInstanceResult",
@@ -57,8 +55,8 @@
       "Parameters": {
         "TableName": "${DynamoTableName}",
         "Key": {
-          "step_function_name": {"S.$": "$.step_function_name"},
-          "step_function_launch_time": {"S.$": "$.step_function_launch_time"}
+          "step_function_name": { "S.$": "$.step_function_name" },
+          "step_function_launch_time": { "S.$": "$.step_function_launch_time" }
         },
         "UpdateExpression": "SET #status = :status, #newId = :newId",
         "ExpressionAttributeNames": {
@@ -66,28 +64,8 @@
           "#newId": "new-instance-id"
         },
         "ExpressionAttributeValues": {
-          ":status": {"S": "COMPLETED"},
-          ":newId": {"S.$": "$.new-instance-id"}
-        }
-      },
-      "End": true
-    },
-
-    "UpdateFailed": {
-      "Type": "Task",
-      "Resource": "arn:aws:states:::aws-sdk:dynamodb:updateItem",
-      "Parameters": {
-        "TableName": "${DynamoTableName}",
-        "Key": {
-          "step_function_name": {"S.$": "$.step_function_name"},
-          "step_function_launch_time": {"S.$": "$.step_function_launch_time"}
-        },
-        "UpdateExpression": "SET #status = :status",
-        "ExpressionAttributeNames": {
-          "#status": "step_function_status"
-        },
-        "ExpressionAttributeValues": {
-          ":status": {"S": "FAILED"}
+          ":status": { "S": "COMPLETED" },
+          ":newId": { "S.$": "$.LaunchInstanceResult.new-instance-id" }
         }
       },
       "End": true
